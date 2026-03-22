@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASCII Text Generator — GitHub Style</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/figlet@1.8.0/lib/figlet.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --gh-bg: #0d1117;
+            --gh-surface: #161b22;
+            --gh-surface2: #21262d;
+            --gh-border: #30363d;
+            --gh-border-muted: #21262d;
+            --gh-text: #e6edf3;
+            --gh-text-muted: #8b949e;
+            --gh-accent: #58a6ff;
+            --gh-accent-dim: #1f6feb;
+            --gh-green: #3fb950;
+            --gh-green-dim: #238636;
+            --gh-orange: #f0883e;
+            --gh-red: #f85149;
+            --gh-purple: #bc8cff;
+            --gh-yellow: #e3b341;
+            --gh-header-bg: #161b22;
+            --gh-header-border: #21262d;
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+            background: var(--gh-bg);
+            color: var(--gh-text);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .gh-header {
+            background: var(--gh-header-bg);
+            border-bottom: 1px solid var(--gh-header-border);
+            padding: 0 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+        .gh-header-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .gh-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--gh-text);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .gh-logo svg { width: 32px; height: 32px; fill: currentColor; flex-shrink: 0; }
+        .gh-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--gh-text-muted);
+            font-size: 14px;
+        }
+        .gh-breadcrumb a { color: var(--gh-accent); text-decoration: none; }
+        .gh-breadcrumb a:hover { text-decoration: underline; }
+        .gh-breadcrumb .sep { color: var(--gh-border); }
+        .header-spacer { flex: 1; }
+
+        .gh-header-actions { display: flex; gap: 8px; align-items: center; }
+
+        .lang-switcher { position: relative; }
+        .lang-btn {
+            background: var(--gh-surface2);
+            color: var(--gh-text);
+            border: 1px solid var(--gh-border);
+            padding: 5px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .lang-btn:hover { background: var(--gh-border); border-color: #8b949e; }
+        .lang-btn .caret { font-size: 10px; opacity: .7; }
+        .lang-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            background: var(--gh-surface);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-md);
+            min-width: 160px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.4);
+            overflow: hidden;
+            z-index: 200;
+        }
+        .lang-menu.open { display: block; animation: menuFade .12s ease; }
+        .lang-menu button {
+            width: 100%;
+            background: none;
+            border: none;
+            color: var(--gh-text);
+            padding: 8px 14px;
+            text-align: left;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background .1s;
+        }
+        .lang-menu button:hover { background: var(--gh-surface2); }
+        .lang-menu button .check { width: 14px; color: var(--gh-green); }
+
+        .main-layout {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px 16px 48px;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 16px;
+        }
+        @media (max-width: 900px) {
+            .main-layout { grid-template-columns: 1fr; }
+            .sidebar { order: -1; }
+        }
+
+        .panel {
+            background: var(--gh-surface);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--gh-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--gh-surface2);
+        }
+        .panel-title {
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .panel-title svg { width: 16px; height: 16px; fill: var(--gh-text-muted); }
+        .panel-body { padding: 16px; }
+
+        .form-group { margin-bottom: 14px; }
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gh-text-muted);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-bottom: 6px;
+        }
+
+        textarea, select, input {
+            width: 100%;
+            background: var(--gh-bg);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-sm);
+            color: var(--gh-text);
+            font-size: 14px;
+            font-family: var(--mono);
+            padding: 8px 12px;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+            appearance: none;
+        }
+        textarea:focus, select:focus, input:focus {
+            border-color: var(--gh-accent);
+            box-shadow: 0 0 0 3px rgba(88,166,255,.12);
+        }
+        textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 7px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s, transform .1s;
+            white-space: nowrap;
+        }
+        .btn:active { transform: scale(.97); }
+        .btn svg { width: 15px; height: 15px; fill: currentColor; }
+
+        .btn-primary {
+            background: var(--gh-green-dim);
+            color: #fff;
+            border: 1px solid rgba(240,246,252,.1);
+            width: 100%;
+            padding: 9px;
+            margin-top: 4px;
+            font-size: 14px;
+        }
+        .btn-primary:hover { background: var(--gh-green); }
+
+        .btn-secondary {
+            background: var(--gh-surface2);
+            color: var(--gh-text);
+            border: 1px solid var(--gh-border);
+            font-size: 12px;
+            padding: 5px 12px;
+        }
+        .btn-secondary:hover { background: var(--gh-border); }
+        .btn-secondary.copied { background: var(--gh-green-dim); color: #fff; border-color: transparent; }
+
+        .align-btns {
+            display: flex;
+            gap: 6px;
+            padding: 12px 16px;
+        }
+        .align-btn {
+            flex: 1;
+            background: var(--gh-surface2);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-sm);
+            color: var(--gh-text-muted);
+            padding: 7px 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: background .15s, color .15s, border-color .15s;
+        }
+        .align-btn:hover { background: var(--gh-border); color: var(--gh-text); }
+        .align-btn.active {
+            background: rgba(88,166,255,.12);
+            border-color: var(--gh-accent);
+            color: var(--gh-accent);
+        }
+        .align-btn svg { width: 13px; height: 13px; fill: currentColor; }
+
+        .tabs-nav {
+            display: flex;
+            border-bottom: 1px solid var(--gh-border);
+            padding: 0 16px;
+            background: var(--gh-surface2);
+            gap: 2px;
+        }
+        .tab-item {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--gh-text-muted);
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: -1px;
+            transition: color .15s;
+        }
+        .tab-item:hover { color: var(--gh-text); }
+        .tab-item.active { color: var(--gh-text); border-bottom-color: var(--gh-orange); }
+        .tab-pane { display: none; padding: 16px; }
+        .tab-pane.active { display: block; }
+
+        .output-wrap { position: relative; }
+        .output-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .output-meta { display: flex; align-items: center; gap: 10px; }
+        .output-badge {
+            background: rgba(56,139,253,.08);
+            border: 1px solid rgba(56,139,253,.15);
+            color: var(--gh-accent);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: var(--mono);
+            font-weight: 600;
+        }
+        .line-count { color: var(--gh-text-muted); font-size: 12px; font-family: var(--mono); }
+
+        .code-block {
+            background: var(--gh-bg);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-sm);
+            overflow: auto;
+            position: relative;
+        }
+        .code-block textarea {
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            width: 100%;
+            resize: none;
+            font-size: 12px;
+            line-height: 1.6;
+            padding: 16px;
+            min-height: 220px;
+            font-family: var(--mono);
+        }
+        .code-block textarea:focus { box-shadow: none; }
+
+        .code-inner { display: flex; }
+        .line-nums {
+            padding: 16px 8px 16px 12px;
+            background: rgba(255,255,255,.02);
+            border-right: 1px solid var(--gh-border);
+            user-select: none;
+            flex-shrink: 0;
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--gh-text-muted);
+            text-align: right;
+            min-width: 42px;
+            white-space: pre;
+        }
+
+        .preview-block {
+            background: var(--gh-bg);
+            border: 1px solid var(--gh-border);
+            border-radius: var(--radius-sm);
+            padding: 24px 20px;
+            min-height: 220px;
+            overflow-x: auto;
+        }
+        .preview-block pre {
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.2;
+            color: var(--gh-text);
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--gh-surface2);
+            border-top: 1px solid var(--gh-border);
+            font-size: 12px;
+            color: var(--gh-text-muted);
+            font-family: var(--mono);
+            min-height: 32px;
+        }
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--gh-text-muted);
+            flex-shrink: 0;
+            transition: background .3s;
+        }
+        .status-dot.ok { background: var(--gh-green); box-shadow: 0 0 6px var(--gh-green); }
+        .status-dot.err { background: var(--gh-red); box-shadow: 0 0 6px var(--gh-red); }
+        .status-dot.loading { background: var(--gh-yellow); animation: pulse 1s infinite; }
+        #statusMsg { transition: color .2s; }
+        #statusMsg.err { color: var(--gh-red); }
+        #statusMsg.ok { color: var(--gh-green); }
+
+        .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+        .info-block { padding: 14px 16px; }
+        .info-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--gh-border-muted);
+            font-size: 13px;
+        }
+        .info-row:last-child { border: none; }
+        .info-row .key { color: var(--gh-text-muted); }
+        .info-row .val { font-family: var(--mono); font-weight: 600; }
+
+        .font-preview-list { padding: 0 0 4px; max-height: 340px; overflow-y: auto; }
+        .font-preview-list::-webkit-scrollbar { width: 6px; }
+        .font-preview-list::-webkit-scrollbar-track { background: transparent; }
+        .font-preview-list::-webkit-scrollbar-thumb { background: var(--gh-border); border-radius: 3px; }
+
+        .font-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 16px;
+            cursor: pointer;
+            transition: background .12s;
+            border-bottom: 1px solid var(--gh-border-muted);
+        }
+        .font-item:last-child { border: none; }
+        .font-item:hover { background: var(--gh-surface2); }
+        .font-item.active { background: rgba(56,139,253,.07); }
+        .font-item .font-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--gh-border);
+            flex-shrink: 0;
+            transition: background .15s;
+        }
+        .font-item.active .font-dot { background: var(--gh-accent); }
+        .font-item .font-name { font-size: 13px; font-weight: 500; }
+        .font-item .font-hint { font-size: 11px; color: var(--gh-text-muted); margin-left: auto; }
+
+        @keyframes menuFade { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+        .panel { animation: fadeIn .25s ease backwards; }
+        .panel:nth-child(2) { animation-delay: .05s; }
+        .panel:nth-child(3) { animation-delay: .1s; }
+
+        .gh-footer {
+            border-top: 1px solid var(--gh-border);
+            padding: 24px 16px;
+            text-align: center;
+            color: var(--gh-text-muted);
+            font-size: 12px;
+        }
+        .gh-footer a { color: var(--gh-accent); text-decoration: none; }
+        .gh-footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<header class="gh-header">
+    <div class="gh-header-inner">
+        <a href="https://github.com/readme-SVG" class="gh-logo">
+            <svg viewBox="0 0 16 16">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            readme-SVG
+        </a>
+        <div class="gh-breadcrumb">
+            <span class="sep">/</span>
+            <a href="https://github.com/readme-SVG/ascii-text-generator">ascii-text-generator</a>
+            <span class="sep">/</span>
+            <span>generator</span>
+        </div>
+        <div class="header-spacer"></div>
+        <div class="gh-header-actions">
+            <div class="lang-switcher">
+                <button class="lang-btn" onclick="toggleLang()">
+                    <span id="langBtnText">English</span>
+                    <span class="caret">▾</span>
+                </button>
+                <div class="lang-menu" id="langMenu">
+                    <button onclick="setLang('en')">
+                        <span class="check" id="check-en">✓</span> English (EN)
+                    </button>
+                    <button onclick="setLang('ru')">
+                        <span class="check" id="check-ru" style="visibility:hidden">✓</span> Русский (RU)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="main-layout">
+
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg viewBox="0 0 16 16"><path d="M0 2.75A2.75 2.75 0 0 1 2.75 0h10.5A2.75 2.75 0 0 1 16 2.75v10.5A2.75 2.75 0 0 1 13.25 16H2.75A2.75 2.75 0 0 1 0 13.25V2.75zm2.75-1.25c-.69 0-1.25.56-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V2.75c0-.69-.56-1.25-1.25-1.25H2.75zM4.5 5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5z"/></svg>
+                    <span id="label-config">Configuration</span>
+                </span>
+            </div>
+            <div class="panel-body">
+                <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" id="label-text">Text Input</label>
+                    <textarea id="inputText" rows="3" placeholder="README&#10;My Project" spellcheck="false">README</textarea>
+                </div>
+                <button class="btn btn-primary" id="generateBtn" onclick="generateArt()">
+                    <svg viewBox="0 0 16 16" style="fill:currentColor;width:14px;height:14px"><path d="M8.4 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0.4 8a8 8 0 1 1 16 0 8 8 0 0 1-16 0z"/><path d="M6.4 5.5v5l5-2.5-5-2.5z"/></svg>
+                    <span id="btn-generate-text">Generate ASCII Art</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="tabs-nav">
+                <button class="tab-item active" id="tab-btn-code" onclick="switchTab('code')">
+                    <svg viewBox="0 0 16 16" style="width:14px;height:14px;fill:currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25Zm7.47 3.97a.75.75 0 0 1 1.06 0l2 2a.75.75 0 0 1 0 1.06l-2 2a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L11.19 8 9.22 6.03a.75.75 0 0 1 0-1.06Zm-4.94 0a.75.75 0 0 1 0 1.06L4.81 8l1.97 1.97a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215l-2-2a.75.75 0 0 1 0-1.06l2-2a.75.75 0 0 1 1.06 0Z"/></svg>
+                    <span id="tab-code-label">Code</span>
+                </button>
+                <button class="tab-item" id="tab-btn-preview" onclick="switchTab('preview')">
+                    <svg viewBox="0 0 16 16" style="width:14px;height:14px;fill:currentColor"><path d="M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 0 1 0 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.83.88 9.576.43 8.898a1.62 1.62 0 0 1 0-1.798c.45-.677 1.367-1.931 2.637-3.022C4.33 2.992 6.019 2 8 2ZM1.679 7.932a.12.12 0 0 0 0 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 0 0 0-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.825.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717ZM8 10a2 2 0 1 1-.001-3.999A2 2 0 0 1 8 10Z"/></svg>
+                    <span id="tab-preview-label">Preview</span>
+                </button>
+            </div>
+
+            <div id="pane-code" class="tab-pane active">
+                <div class="output-wrap">
+                    <div class="output-toolbar">
+                        <div class="output-meta">
+                            <span class="output-badge">markdown</span>
+                            <span class="line-count" id="lineCount">0 lines</span>
+                        </div>
+                        <button class="btn btn-secondary" id="copyBtn" onclick="copyCode()">
+                            <svg viewBox="0 0 16 16" style="width:12px;height:12px;fill:currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+                            <span id="copy-btn-text">Copy</span>
+                        </button>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-inner">
+                            <div class="line-nums" id="lineNums">1</div>
+                            <textarea id="outputCode" readonly spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pane-preview" class="tab-pane">
+                <div class="preview-block">
+                    <div id="previewArea"></div>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusMsg">Ready</span>
+                <span style="margin-left:auto;color:var(--gh-text-muted);opacity:.5" id="statusFont">—</span>
+            </div>
+        </div>
+    </div>
+
+    <aside class="sidebar">
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg viewBox="0 0 16 16"><path d="M1 2.75a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75Zm0 5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1-.75-.75Z"/></svg>
+                    <span id="label-align">Alignment</span>
+                </span>
+            </div>
+            <div class="align-btns">
+                <button class="align-btn" id="align-left" onclick="setAlign('left')" title="Left">
+                    <svg viewBox="0 0 16 16"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 1 7.75Zm0 5a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1-.75-.75Z"/></svg>
+                    <span id="opt-left">Left</span>
+                </button>
+                <button class="align-btn active" id="align-center" onclick="setAlign('center')" title="Center">
+                    <svg viewBox="0 0 16 16"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm3 5A.75.75 0 0 1 4.75 7h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 4 7.75Zm-1.25 5A.75.75 0 0 1 3.5 12h9a.75.75 0 0 1 0 1.5h-9a.75.75 0 0 1-.75-.75Z"/></svg>
+                    <span id="opt-center">Center</span>
+                </button>
+                <button class="align-btn" id="align-right" onclick="setAlign('right')" title="Right">
+                    <svg viewBox="0 0 16 16"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm5 5A.75.75 0 0 1 6.75 7h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 6 7.75Zm-2.25 5a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5h-9a.75.75 0 0 1-.75-.75Z"/></svg>
+                    <span id="opt-right">Right</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg viewBox="0 0 16 16"><path d="M6.27 6a.75.75 0 0 1 .74.641l.161 1.234c.196-.175.408-.33.641-.46A3.75 3.75 0 0 1 9.5 7c.966 0 1.85.375 2.508.984A3.75 3.75 0 0 1 13 10.75v4.5a.75.75 0 0 1-1.5 0v-4.5c0-.732-.3-1.394-.786-1.872A2.25 2.25 0 0 0 9.5 8.5a2.25 2.25 0 0 0-2.25 2.25v4.5a.75.75 0 0 1-1.5 0v-4.5A3.757 3.757 0 0 1 6.9 8.09L6.27 3.5H4.75a.75.75 0 0 1 0-1.5h2a.75.75 0 0 1 .743.641L7.753 5H12a.75.75 0 0 1 0 1.5H6.27Z"/></svg>
+                    <span id="label-fonts">Fonts</span>
+                </span>
+            </div>
+            <div class="font-preview-list" id="fontList"></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg viewBox="0 0 16 16"><path d="M1.5 1.75a.75.75 0 0 0-1.5 0v12.5c0 .414.336.75.75.75H14.25a.75.75 0 0 0 0-1.5H1.5V1.75zM3 9.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5zM9 5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V5z"/></svg>
+                    <span id="label-stats">Stats</span>
+                </span>
+            </div>
+            <div class="info-block">
+                <div class="info-row">
+                    <span class="key" id="stat-label-lines">Lines</span>
+                    <span class="val" id="stat-lines">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="key" id="stat-label-chars">Characters</span>
+                    <span class="val" id="stat-chars">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg viewBox="0 0 16 16"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+                    <span id="label-usage">Usage</span>
+                </span>
+            </div>
+            <div class="panel-body">
+                <p style="color:var(--gh-text-muted);font-size:13px;line-height:1.6" id="usage-text">
+                    Copy the generated code and paste it into your <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">README.md</code>. The <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">&lt;pre&gt;</code> tag inside <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">div</code> ensures correct rendering on GitHub.
+                </p>
+            </div>
+        </div>
+    </aside>
+</main>
+
+<footer class="gh-footer">
+    <span>If this tool saved you time — a <a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a> means a lot!</span>
+</footer>
+
+<script>
+const T = {
+    en: {
+        labelConfig: 'Configuration',
+        labelText: 'Text Input',
+        labelAlign: 'Alignment',
+        labelFonts: 'Fonts',
+        labelStats: 'Stats',
+        labelUsage: 'Usage',
+        btnGenerate: 'Generate ASCII Art',
+        tabCode: 'Code',
+        tabPreview: 'Preview',
+        copyBtn: 'Copy',
+        copied: 'Copied!',
+        optLeft: 'Left', optCenter: 'Center', optRight: 'Right',
+        statLines: 'Lines', statChars: 'Characters',
+        statusReady: 'Ready',
+        statusLoading: 'Generating...',
+        statusOk: 'Done',
+        errLoad: 'Figlet library failed to load.',
+        errFont: 'Failed to load font file.',
+        errGen: 'Rendering error',
+        usageText: 'Copy the generated code and paste it into your <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">README.md</code>. The <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">&lt;pre&gt;</code> tag inside <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">div</code> ensures correct rendering on GitHub.',
+        linesSuffix: 'lines',
+        footerText: 'If this tool saved you time — a <a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a> means a lot!',
+    },
+    ru: {
+        labelConfig: 'Настройки',
+        labelText: 'Текст',
+        labelAlign: 'Выравнивание',
+        labelFonts: 'Шрифты',
+        labelStats: 'Статистика',
+        labelUsage: 'Использование',
+        btnGenerate: 'Сгенерировать',
+        tabCode: 'Код',
+        tabPreview: 'Просмотр',
+        copyBtn: 'Копировать',
+        copied: 'Скопировано!',
+        optLeft: 'Слева', optCenter: 'По центру', optRight: 'Справа',
+        statLines: 'Строки', statChars: 'Символы',
+        statusReady: 'Готов',
+        statusLoading: 'Генерация...',
+        statusOk: 'Готово',
+        errLoad: 'Не удалось загрузить Figlet.',
+        errFont: 'Ошибка загрузки шрифта.',
+        errGen: 'Ошибка рендеринга',
+        usageText: 'Скопируйте код и вставьте его в <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">README.md</code>. Тег <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">&lt;pre&gt;</code> внутри <code style="background:var(--gh-surface2);padding:1px 5px;border-radius:3px;font-size:12px">div</code> обеспечивает корректное отображение на GitHub.',
+        linesSuffix: 'строк',
+        footerText: 'Если инструмент сэкономил тебе время — <a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a> очень важна!',
+    }
+};
+
+const FONTS = [
+    { id: 'ANSI Shadow',      hint: 'Bold 3D' },
+    { id: 'Standard',         hint: 'Classic' },
+    { id: 'Slant',            hint: 'Italic' },
+    { id: 'Block',            hint: 'Heavy' },
+    { id: 'Doom',             hint: 'Retro' },
+    { id: 'Big',              hint: 'Large' },
+    { id: 'Banner3-D',        hint: '3D' },
+    { id: 'Bloody',           hint: 'Horror' },
+    { id: 'Bright',           hint: 'Clean' },
+    { id: 'Broadway',         hint: 'Wide' },
+    { id: 'Bulbhead',         hint: 'Round' },
+    { id: 'Calvin S',         hint: 'Slim' },
+    { id: 'Colossal',         hint: 'Huge' },
+    { id: 'Cyberlarge',       hint: 'Cyber' },
+    { id: 'Cybermedium',      hint: 'Cyber' },
+    { id: 'DOS Rebel',        hint: 'DOS' },
+    { id: 'Double',           hint: 'Double' },
+    { id: 'Efti Font',        hint: 'Efti' },
+    { id: 'Epic',             hint: 'Epic' },
+    { id: 'Fire Font-k',      hint: 'Fire' },
+    { id: 'Fraktur',          hint: 'Gothic' },
+    { id: 'Georgia11',        hint: 'Serif' },
+    { id: 'Ghost',            hint: 'Spooky' },
+    { id: 'Gradient',         hint: 'Grad' },
+    { id: 'Graffiti',         hint: 'Street' },
+    { id: 'Hollywood',        hint: 'Movie' },
+    { id: 'Isometric1',       hint: 'Iso' },
+    { id: 'Isometric2',       hint: 'Iso' },
+    { id: 'Isometric3',       hint: 'Iso' },
+    { id: 'Isometric4',       hint: 'Iso' },
+    { id: 'JS Block Letters', hint: 'Block' },
+    { id: 'Keyboard',         hint: 'Keys' },
+    { id: 'Larry 3D',         hint: '3D' },
+    { id: 'Lean',             hint: 'Lean' },
+    { id: 'Letters',          hint: 'Letters' },
+    { id: 'Linux',            hint: 'Linux' },
+    { id: 'Modular',          hint: 'Mod' },
+    { id: 'Morse',            hint: '...' },
+    { id: 'Nancyj-Fancy',     hint: 'Fancy' },
+    { id: 'Ogre',             hint: 'Fantasy' },
+    { id: 'Old Banner',       hint: 'Old' },
+    { id: 'Pawp',             hint: 'Pop' },
+    { id: 'Peaks',            hint: 'Sharp' },
+    { id: 'Poison',           hint: 'Toxic' },
+    { id: 'Puffy',            hint: 'Soft' },
+    { id: 'Rectangles',       hint: 'Rect' },
+    { id: 'Rozzo',            hint: 'Round' },
+    { id: 'Shadow',           hint: 'Shadow' },
+    { id: 'Shimrod',          hint: 'Wizard' },
+    { id: 'Small',            hint: 'Compact' },
+    { id: 'Soft',             hint: 'Soft' },
+    { id: 'Star Wars',        hint: 'SW' },
+    { id: 'Stellar',          hint: 'Space' },
+    { id: 'Stop',             hint: 'Stop' },
+    { id: 'Sub-Zero',         hint: 'Icy' },
+    { id: 'Swamp Land',       hint: 'Swamp' },
+    { id: 'Sweet',            hint: 'Sweet' },
+    { id: 'Thick',            hint: 'Thick' },
+    { id: 'Thin',             hint: 'Thin' },
+    { id: 'Ticks',            hint: 'Ticks' },
+    { id: 'Tiles',            hint: 'Tiles' },
+    { id: 'Train',            hint: 'Train' },
+    { id: 'Trek',             hint: 'Sci-Fi' },
+    { id: 'Twisted',          hint: 'Twisted' },
+    { id: 'USA Flag',         hint: 'USA' },
+    { id: 'Univers',          hint: 'Uni' },
+    { id: 'Wavy',             hint: 'Wave' },
+    { id: 'Weird',            hint: 'Weird' },
+];
+
+let lang = 'en';
+let activeFont = 'ANSI Shadow';
+let activeAlign = 'center';
+const loadedFonts = new Set();
+
+function toggleLang() {
+    document.getElementById('langMenu').classList.toggle('open');
+}
+window.addEventListener('click', e => {
+    if (!e.target.closest('.lang-switcher')) {
+        document.getElementById('langMenu').classList.remove('open');
+    }
+});
+
+function setLang(l) {
+    lang = l;
+    const t = T[l];
+    document.getElementById('langMenu').classList.remove('open');
+    document.getElementById('langBtnText').textContent = l === 'en' ? ' English' : ' Русский';
+    document.getElementById('check-en').style.visibility = l === 'en' ? 'visible' : 'hidden';
+    document.getElementById('check-ru').style.visibility = l === 'ru' ? 'visible' : 'hidden';
+
+    document.getElementById('label-config').textContent = t.labelConfig;
+    document.getElementById('label-text').textContent = t.labelText;
+    document.getElementById('label-align').textContent = t.labelAlign;
+    document.getElementById('label-fonts').textContent = t.labelFonts;
+    document.getElementById('label-stats').textContent = t.labelStats;
+    document.getElementById('label-usage').textContent = t.labelUsage;
+    document.getElementById('btn-generate-text').textContent = t.btnGenerate;
+    document.getElementById('tab-code-label').textContent = t.tabCode;
+    document.getElementById('tab-preview-label').textContent = t.tabPreview;
+    document.getElementById('opt-left').textContent = t.optLeft;
+    document.getElementById('opt-center').textContent = t.optCenter;
+    document.getElementById('opt-right').textContent = t.optRight;
+    document.getElementById('stat-label-lines').textContent = t.statLines;
+    document.getElementById('stat-label-chars').textContent = t.statChars;
+    document.getElementById('usage-text').innerHTML = t.usageText;
+    document.querySelector('.gh-footer span').innerHTML = t.footerText;
+
+    const copyBtn = document.getElementById('copy-btn-text');
+    if (copyBtn.textContent !== T.en.copied && copyBtn.textContent !== T.ru.copied) {
+        copyBtn.textContent = t.copyBtn;
+    }
+    setStatus('ready');
+}
+
+function setAlign(a) {
+    activeAlign = a;
+    document.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('align-' + a).classList.add('active');
+    generateArt();
+}
+
+function buildFontList() {
+    const list = document.getElementById('fontList');
+    list.innerHTML = FONTS.map(f => `
+        <div class="font-item ${f.id === activeFont ? 'active' : ''}" id="fitem-${f.id.replace(/ /g,'_').replace(/[^a-zA-Z0-9_-]/g,'')}" onclick="selectFont('${f.id.replace(/'/g,"\\'")}')">
+            <div class="font-dot"></div>
+            <span class="font-name">${f.id}</span>
+            <span class="font-hint">${f.hint}</span>
+        </div>`).join('');
+}
+
+function selectFont(fontId) {
+    activeFont = fontId;
+    buildFontList();
+    generateArt();
+}
+
+function switchTab(id) {
+    document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-btn-' + id).classList.add('active');
+    document.getElementById('pane-' + id).classList.add('active');
+}
+
+function setStatus(state, msg) {
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusMsg');
+    const t = T[lang];
+    dot.className = 'status-dot';
+    txt.className = '';
+    if (state === 'loading') { dot.classList.add('loading'); txt.textContent = msg || t.statusLoading; }
+    else if (state === 'ok')  { dot.classList.add('ok');      txt.textContent = msg || t.statusOk; txt.classList.add('ok'); }
+    else if (state === 'err') { dot.classList.add('err');     txt.textContent = msg || t.errGen; txt.classList.add('err'); }
+    else                      { txt.textContent = msg || t.statusReady; }
+}
+
+function updateLineNums(text) {
+    const n = (text.match(/\n/g) || []).length + 1;
+    document.getElementById('lineNums').textContent = Array.from({length:n},(_,i)=>i+1).join('\n');
+    document.getElementById('lineCount').textContent = n + ' ' + T[lang].linesSuffix;
+    document.getElementById('stat-lines').textContent = n;
+    document.getElementById('stat-chars').textContent = text.length;
+}
+
+async function generateArt() {
+    if (typeof figlet === 'undefined') { setStatus('err', T[lang].errLoad); return; }
+
+    const text = document.getElementById('inputText').value.trim() || 'TEXT';
+    const font = activeFont;
+    const align = activeAlign;
+
+    setStatus('loading');
+    document.getElementById('statusFont').textContent = font;
+
+    try {
+        if (!loadedFonts.has(font)) {
+            const res = await fetch(`https://cdn.jsdelivr.net/npm/figlet@1.8.0/fonts/${encodeURIComponent(font)}.flf`);
+            if (!res.ok) throw new Error(T[lang].errFont);
+            figlet.parseFont(font, await res.text());
+            loadedFonts.add(font);
+        }
+
+        figlet.text(text, font, (err, result) => {
+            if (err || !result) { setStatus('err', T[lang].errGen); return; }
+
+            const code = `<div align="${align}">\n\n<pre>\n${result}\n</pre>\n\n</div>`;
+            document.getElementById('outputCode').value = code;
+            updateLineNums(code);
+
+            document.getElementById('previewArea').innerHTML =
+                `<div align="${align}"><pre style="font-family:var(--mono);font-size:11px;line-height:1.2">${result}</pre></div>`;
+
+            setStatus('ok');
+            setTimeout(() => setStatus('ready'), 2000);
+        });
+    } catch(e) {
+        setStatus('err', e.message);
+    }
+}
+
+function copyCode() {
+    const val = document.getElementById('outputCode').value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const txt = document.getElementById('copy-btn-text');
+        btn.classList.add('copied');
+        txt.textContent = T[lang].copied;
+        setTimeout(() => { btn.classList.remove('copied'); txt.textContent = T[lang].copyBtn; }, 2000);
+    });
+}
+
+let debounce;
+document.getElementById('inputText').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(generateArt, 600);
+});
+
+buildFontList();
+setLang('en');
+generateArt();
+</script>
+</body>
+</html>
