@@ -25,15 +25,15 @@ jobs:
       CODEQL_QUERY_SUITE: security-and-quality # Replace if you need a custom CodeQL query pack.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: ${{ env.CODEQL_QUERY_SUITE }}
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
