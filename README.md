@@ -20,14 +20,19 @@ Y88b  d88P Y8b.     888  888 Y8b.     888    888  888 Y88b. Y88..88P 888
  "Y8888P88  "Y8888  888  888  "Y8888  888    "Y888888  "Y888 "Y88P"  888                 
 </pre>
 
-</div>
-
 A modern, feature-rich web-based ASCII art generator with GitHub-inspired styling, supporting 70+ fonts and multiple language interfaces.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue?style=for-the-badge)](LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/readme-SVG/ascii-text-generator/lint.yml?style=for-the-badge)](https://github.com/readme-SVG/ascii-text-generator/actions)
 [![GitHub Stars](https://img.shields.io/github/stars/readme-SVG/ascii-text-generator?style=for-the-badge)](https://github.com/readme-SVG/ascii-text-generator)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?style=for-the-badge&logo=javascript)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Fonts](https://img.shields.io/badge/Fonts-70+-brightgreen?style=for-the-badge)](#features)
+[![Languages](https://img.shields.io/badge/Languages-14-blue?style=for-the-badge)](#multilingual-support)
+[![Zero Dependencies](https://img.shields.io/badge/Zero-Dependencies-green?style=for-the-badge)](#tech-stack--architecture)
+[![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+[![WCAG Accessible](https://img.shields.io/badge/WCAG-Accessible-green?style=for-the-badge)](#getting-started)
+
+</div>
 
 ## Table of Contents
 
