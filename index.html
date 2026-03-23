@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/figlet@1.8.0/lib/figlet.js"></script>
-    <script src="assets/js/app.js" defer></script>
+    <script type="module" src="assets/js/app.js"></script>
 </head>
 <body>
     <header class="gh-header">
@@ -33,16 +33,7 @@
                         <span id="langBtnText">English</span>
                         <span class="caret">▾</span>
                     </button>
-                    <div class="lang-menu" id="langMenu">
-                        <button type="button" data-lang="en">
-                            <span class="check" id="check-en">✓</span>
-                            <span>English (EN)</span>
-                        </button>
-                        <button type="button" data-lang="ru">
-                            <span class="check hidden" id="check-ru">✓</span>
-                            <span>Русский (RU)</span>
-                        </button>
-                    </div>
+                    <div class="lang-menu" id="langMenu"></div>
                 </div>
             </div>
         </div>

@@ -1,61 +1,4 @@
-const translations = {
-    en: {
-        langButton: 'English',
-        labelConfig: 'Configuration',
-        labelText: 'Text Input',
-        labelAlign: 'Alignment',
-        labelFonts: 'Fonts',
-        labelStats: 'Stats',
-        labelUsage: 'Usage',
-        btnGenerate: 'Generate ASCII Art',
-        tabCode: 'Code',
-        tabPreview: 'Preview',
-        copyBtn: 'Copy',
-        copied: 'Copied!',
-        optLeft: 'Left',
-        optCenter: 'Center',
-        optRight: 'Right',
-        statLines: 'Lines',
-        statChars: 'Characters',
-        statusReady: 'Ready',
-        statusLoading: 'Generating...',
-        statusOk: 'Done',
-        errLoad: 'Figlet library failed to load.',
-        errFont: 'Failed to load font file.',
-        errGen: 'Rendering error',
-        linesSuffix: 'lines',
-        usageText: 'Copy the generated code and paste it into your README.md. The <pre> tag inside a div ensures correct rendering on GitHub.',
-        footerText: 'If this tool saved you time — a ⭐ means a lot!'
-    },
-    ru: {
-        langButton: 'Русский',
-        labelConfig: 'Настройки',
-        labelText: 'Текст',
-        labelAlign: 'Выравнивание',
-        labelFonts: 'Шрифты',
-        labelStats: 'Статистика',
-        labelUsage: 'Использование',
-        btnGenerate: 'Сгенерировать',
-        tabCode: 'Код',
-        tabPreview: 'Просмотр',
-        copyBtn: 'Копировать',
-        copied: 'Скопировано!',
-        optLeft: 'Слева',
-        optCenter: 'По центру',
-        optRight: 'Справа',
-        statLines: 'Строки',
-        statChars: 'Символы',
-        statusReady: 'Готов',
-        statusLoading: 'Генерация...',
-        statusOk: 'Готово',
-        errLoad: 'Не удалось загрузить Figlet.',
-        errFont: 'Ошибка загрузки шрифта.',
-        errGen: 'Ошибка рендеринга',
-        linesSuffix: 'строк',
-        usageText: 'Скопируйте код и вставьте его в README.md. Тег <pre> внутри div обеспечивает корректное отображение на GitHub.',
-        footerText: 'Если инструмент сэкономил тебе время — ⭐ очень важна!'
-    }
-};
+import { copiedLabels, supportedLanguages, translations } from './i18n/index.js';
 
 const fonts = [
     { id: 'ANSI Shadow', hint: 'Bold 3D' },
@@ -157,6 +100,22 @@ function getFooterMarkup(text) {
     return text.replace('⭐', '<a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a>');
 }
 
+function renderLanguageMenu() {
+    elements.langMenu.innerHTML = supportedLanguages.map((languageCode) => {
+        const languageCopy = translations[languageCode];
+        const isActive = languageCode === state.lang ? '' : ' hidden';
+
+        return `
+            <button type="button" data-lang="${languageCode}">
+                <span class="check${isActive}" id="check-${languageCode}">✓</span>
+                <span>${languageCopy.languageMenuLabel}</span>
+            </button>
+        `;
+    }).join('');
+
+    elements.languageButtons = Array.from(elements.langMenu.querySelectorAll('[data-lang]'));
+}
+
 function toggleLangMenu() {
     const isOpen = elements.langMenu.classList.toggle('open');
     elements.langToggleBtn.setAttribute('aria-expanded', String(isOpen));
@@ -236,14 +195,23 @@ function setAlignment(alignment) {
     generateArt();
 }
 
+function updateLanguageChecks() {
+    supportedLanguages.forEach((languageCode) => {
+        const checkElement = document.getElementById(`check-${languageCode}`);
+
+        if (checkElement) {
+            checkElement.classList.toggle('hidden', languageCode !== state.lang);
+        }
+    });
+}
+
 function setLanguage(language) {
     state.lang = language;
     const copy = translations[language];
 
     closeLangMenu();
     elements.langBtnText.textContent = copy.langButton;
-    elements.checkEn.classList.toggle('hidden', language !== 'en');
-    elements.checkRu.classList.toggle('hidden', language !== 'ru');
+    updateLanguageChecks();
 
     elements.labelConfig.textContent = copy.labelConfig;
     elements.labelText.textContent = copy.labelText;
@@ -262,7 +230,7 @@ function setLanguage(language) {
     elements.usageText.innerHTML = getUsageMarkup(copy.usageText);
     elements.footerText.innerHTML = getFooterMarkup(copy.footerText);
 
-    if (![translations.en.copied, translations.ru.copied].includes(elements.copyBtnText.textContent)) {
+    if (!copiedLabels.includes(elements.copyBtnText.textContent)) {
         elements.copyBtnText.textContent = copy.copyBtn;
     }
 
@@ -352,8 +320,6 @@ function cacheElements() {
     elements.langToggleBtn = document.getElementById('langToggleBtn');
     elements.langMenu = document.getElementById('langMenu');
     elements.langBtnText = document.getElementById('langBtnText');
-    elements.checkEn = document.getElementById('check-en');
-    elements.checkRu = document.getElementById('check-ru');
     elements.labelConfig = document.getElementById('label-config');
     elements.labelText = document.getElementById('label-text');
     elements.labelAlign = document.getElementById('label-align');
@@ -386,7 +352,7 @@ function cacheElements() {
     elements.tabItems = Array.from(document.querySelectorAll('.tab-item'));
     elements.tabPanes = Array.from(document.querySelectorAll('.tab-pane'));
     elements.alignButtons = Array.from(document.querySelectorAll('.align-btn'));
-    elements.languageButtons = Array.from(document.querySelectorAll('[data-lang]'));
+    elements.languageButtons = [];
 }
 
 function bindEvents() {
@@ -422,6 +388,7 @@ function bindEvents() {
 
 function init() {
     cacheElements();
+    renderLanguageMenu();
     renderFontList();
     bindEvents();
     setLanguage('en');
