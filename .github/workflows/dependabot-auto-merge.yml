@@ -1,0 +1,44 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    name: Approve and merge safe Dependabot updates
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MERGE_METHOD: squash # Update if your repository requires merge or rebase.
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve patch and minor updates
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr review "$PR_URL" --approve --body "Auto-approving safe Dependabot update."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
+      - name: Enable auto-merge for patch and minor updates
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge "$PR_URL" --auto --"$MERGE_METHOD"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
