@@ -1,5 +1,12 @@
 import { copiedLabels, supportedLanguages, translations } from './i18n/index.js';
 
+// figlet.js is pinned to a single version so the font files always match the parser.
+const FONT_BASE_URL = 'https://cdn.jsdelivr.net/npm/figlet@1.8.0/fonts';
+const FONT_TIMEOUT_MS = 15000;
+const DEBOUNCE_MS = 600;
+const STATUS_RESET_MS = 2000;
+const COPY_RESET_MS = 2000;
+
 const fonts = [
     { id: 'ANSI Shadow', hint: 'Bold 3D' },
     { id: 'Standard', hint: 'Classic' },
@@ -71,44 +78,67 @@ const fonts = [
     { id: 'Weird', hint: 'Weird' }
 ];
 
+const FONT_IDS = new Set(fonts.map((font) => font.id));
+
+const HTML_ESCAPES = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
 const state = {
     lang: 'en',
     activeFont: 'ANSI Shadow',
     activeAlign: 'center',
     debounceId: null,
-    loadedFonts: new Set()
+    statusTimerId: null,
+    copyTimerId: null,
+    // Incremented on every render request; results from older requests are discarded.
+    renderId: 0,
+    loadedFonts: new Set(),
+    // Font downloads in progress, keyed by font name, so concurrent requests share one fetch.
+    pendingFonts: new Map()
 };
 
 const elements = {};
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
+
+// Art is written into an HTML block (<pre>) in the generated code, so only the characters
+// that could start markup need escaping. Quotes stay readable.
+function escapeArt(value) {
+    return String(value).replace(/[&<>]/g, (char) => HTML_ESCAPES[char]);
+}
 
 function getFontItemId(fontId) {
     return `fitem-${fontId.replace(/ /g, '_').replace(/[^a-zA-Z0-9_-]/g, '')}`;
 }
 
-function escapeAttribute(value) {
-    return value.replace(/'/g, '&#39;');
-}
-
 function getUsageMarkup(text) {
-    return text
+    return escapeHtml(text)
         .replace('README.md', '<code class="inline-code">README.md</code>')
-        .replace('<pre>', '<code class="inline-code">&lt;pre&gt;</code>')
+        .replace('&lt;pre&gt;', '<code class="inline-code">&lt;pre&gt;</code>')
         .replace('div', '<code class="inline-code">div</code>');
 }
 
 function getFooterMarkup(text) {
-    return text.replace('⭐', '<a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a>');
+    return escapeHtml(text).replace('⭐', '<a href="https://github.com/readme-SVG/ascii-text-generator">⭐</a>');
 }
 
 function renderLanguageMenu() {
     elements.langMenu.innerHTML = supportedLanguages.map((languageCode) => {
         const languageCopy = translations[languageCode];
-        const isActive = languageCode === state.lang ? '' : ' hidden';
+        const code = escapeHtml(languageCode);
+        const hiddenClass = languageCode === state.lang ? '' : ' hidden';
 
         return `
-            <button type="button" data-lang="${languageCode}">
-                <span class="check${isActive}" id="check-${languageCode}">✓</span>
-                <span>${languageCopy.languageMenuLabel}</span>
+            <button type="button" data-lang="${code}">
+                <span class="check${hiddenClass}" id="check-${code}">✓</span>
+                <span>${escapeHtml(languageCopy.languageMenuLabel)}</span>
             </button>
         `;
     }).join('');
@@ -127,6 +157,9 @@ function closeLangMenu() {
 }
 
 function setStatus(stateName, message) {
+    // Any new status replaces a pending auto-reset, so an old timer cannot hide a newer message.
+    window.clearTimeout(state.statusTimerId);
+
     const copy = translations[state.lang];
     elements.statusDot.className = 'status-dot';
     elements.statusMsg.className = '';
@@ -154,8 +187,12 @@ function setStatus(stateName, message) {
     elements.statusMsg.textContent = message || copy.statusReady;
 }
 
+function scheduleStatusReset() {
+    state.statusTimerId = window.setTimeout(() => setStatus('ready'), STATUS_RESET_MS);
+}
+
 function updateLineNumbers(text) {
-    const lineCount = (text.match(/\n/g) || []).length + 1;
+    const lineCount = text.split('\n').length;
     elements.lineNums.textContent = Array.from({ length: lineCount }, (_, index) => index + 1).join('\n');
     elements.lineCount.textContent = `${lineCount} ${translations[state.lang].linesSuffix}`;
     elements.statLines.textContent = String(lineCount);
@@ -163,16 +200,23 @@ function updateLineNumbers(text) {
 }
 
 function renderFontList() {
-    elements.fontList.innerHTML = fonts.map((font) => {
-        const isActive = font.id === state.activeFont ? ' active' : '';
-        return `
-            <button class="font-item${isActive}" id="${getFontItemId(font.id)}" type="button" data-font="${escapeAttribute(font.id)}">
-                <span class="font-dot"></span>
-                <span class="font-name">${font.id}</span>
-                <span class="font-hint">${font.hint}</span>
-            </button>
-        `;
-    }).join('');
+    elements.fontList.innerHTML = fonts.map((font) => `
+        <button class="font-item" id="${getFontItemId(font.id)}" type="button" data-font="${escapeHtml(font.id)}">
+            <span class="font-dot"></span>
+            <span class="font-name">${escapeHtml(font.id)}</span>
+            <span class="font-hint">${escapeHtml(font.hint)}</span>
+        </button>
+    `).join('');
+
+    elements.fontItems = Array.from(elements.fontList.querySelectorAll('[data-font]'));
+    updateActiveFont();
+}
+
+// Only toggles the active class, so changing the font does not rebuild the whole list.
+function updateActiveFont() {
+    elements.fontItems.forEach((button) => {
+        button.classList.toggle('active', button.dataset.font === state.activeFont);
+    });
 }
 
 function switchTab(tabId) {
@@ -206,8 +250,12 @@ function updateLanguageChecks() {
 }
 
 function setLanguage(language) {
-    state.lang = language;
     const copy = translations[language];
+    if (!copy) {
+        return;
+    }
+
+    state.lang = language;
 
     closeLangMenu();
     elements.langBtnText.textContent = copy.langButton;
@@ -239,26 +287,79 @@ function setLanguage(language) {
 }
 
 function setFont(fontId) {
-    state.activeFont = fontId;
-    renderFontList();
-    generateArt();
-}
-
-async function ensureFontLoaded(font) {
-    if (state.loadedFonts.has(font)) {
+    if (!FONT_IDS.has(fontId)) {
         return;
     }
 
-    const response = await fetch(`https://cdn.jsdelivr.net/npm/figlet@1.8.0/fonts/${encodeURIComponent(font)}.flf`);
-    if (!response.ok) {
+    state.activeFont = fontId;
+    updateActiveFont();
+    generateArt();
+}
+
+async function loadFontFile(font) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), FONT_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(`${FONT_BASE_URL}/${encodeURIComponent(font)}.flf`, {
+            signal: controller.signal
+        });
+        if (!response.ok) {
+            throw new Error('Unexpected response');
+        }
+
+        figlet.parseFont(font, await response.text());
+    } catch {
         throw new Error(translations[state.lang].errFont);
+    } finally {
+        window.clearTimeout(timeoutId);
+    }
+}
+
+// Downloads and parses a font once. Failed downloads are not cached, so a later attempt can retry.
+function ensureFontLoaded(font) {
+    if (state.loadedFonts.has(font)) {
+        return Promise.resolve();
     }
 
-    figlet.parseFont(font, await response.text());
-    state.loadedFonts.add(font);
+    let pending = state.pendingFonts.get(font);
+    if (!pending) {
+        pending = loadFontFile(font)
+            .then(() => {
+                state.loadedFonts.add(font);
+            })
+            .finally(() => {
+                state.pendingFonts.delete(font);
+            });
+        state.pendingFonts.set(font, pending);
+    }
+
+    return pending;
+}
+
+function renderOutput(result, align) {
+    const code = `<div align="${align}">\n\n<pre>\n${escapeArt(result)}\n</pre>\n\n</div>`;
+    elements.outputCode.value = code;
+    updateLineNumbers(code);
+
+    // Built with DOM APIs so the art is inserted as text and never parsed as HTML.
+    const wrapper = document.createElement('div');
+    wrapper.className = 'preview-content';
+    wrapper.setAttribute('align', align);
+
+    const pre = document.createElement('pre');
+    pre.textContent = result;
+    wrapper.append(pre);
+
+    elements.previewArea.replaceChildren(wrapper);
 }
 
 async function generateArt() {
+    // A direct request supersedes any debounced one that is still waiting.
+    window.clearTimeout(state.debounceId);
+    const requestId = ++state.renderId;
+    const isStale = () => requestId !== state.renderId;
+
     if (typeof figlet === 'undefined') {
         setStatus('err', translations[state.lang].errLoad);
         return;
@@ -273,47 +374,70 @@ async function generateArt() {
 
     try {
         await ensureFontLoaded(font);
-
-        figlet.text(text, font, (error, result) => {
-            if (error || !result) {
-                setStatus('err', translations[state.lang].errGen);
-                return;
-            }
-
-            const code = `<div align="${align}">\n\n<pre>\n${result}\n</pre>\n\n</div>`;
-            elements.outputCode.value = code;
-            updateLineNumbers(code);
-
-            elements.previewArea.innerHTML = `<div class="preview-content" align="${align}"><pre>${result}</pre></div>`;
-
-            setStatus('ok');
-            window.setTimeout(() => setStatus('ready'), 2000);
-        });
     } catch (error) {
-        setStatus('err', error.message);
+        if (!isStale()) {
+            setStatus('err', error.message);
+        }
+        return;
     }
+
+    if (isStale()) {
+        return;
+    }
+
+    let result;
+    try {
+        result = await figlet.text(text, font);
+    } catch {
+        result = null;
+    }
+
+    if (isStale()) {
+        return;
+    }
+
+    if (!result) {
+        setStatus('err', translations[state.lang].errGen);
+        return;
+    }
+
+    renderOutput(result, align);
+    setStatus('ok');
+    scheduleStatusReset();
 }
 
-function copyCode() {
+async function copyCode() {
     const value = elements.outputCode.value;
     if (!value) {
         return;
     }
 
-    navigator.clipboard.writeText(value).then(() => {
-        elements.copyBtn.classList.add('copied');
-        elements.copyBtnText.textContent = translations[state.lang].copied;
+    try {
+        if (!navigator.clipboard) {
+            throw new Error('Clipboard API is unavailable');
+        }
+        await navigator.clipboard.writeText(value);
+    } catch {
+        // Clipboard access is blocked (e.g. insecure context or permission denied):
+        // select the text so the user can copy it manually.
+        elements.outputCode.focus();
+        elements.outputCode.select();
+        return;
+    }
 
-        window.setTimeout(() => {
-            elements.copyBtn.classList.remove('copied');
-            elements.copyBtnText.textContent = translations[state.lang].copyBtn;
-        }, 2000);
-    });
+    elements.copyBtn.classList.add('copied');
+    elements.copyBtnText.textContent = translations[state.lang].copied;
+
+    window.clearTimeout(state.copyTimerId);
+    state.copyTimerId = window.setTimeout(() => {
+        elements.copyBtn.classList.remove('copied');
+        elements.copyBtnText.textContent = translations[state.lang].copyBtn;
+    }, COPY_RESET_MS);
 }
 
 function handleInputChange() {
     window.clearTimeout(state.debounceId);
-    state.debounceId = window.setTimeout(generateArt, 600);
+    state.debounceId = window.setTimeout(generateArt, DEBOUNCE_MS);
 }
 
 function cacheElements() {
@@ -353,6 +477,7 @@ function cacheElements() {
     elements.tabPanes = Array.from(document.querySelectorAll('.tab-pane'));
     elements.alignButtons = Array.from(document.querySelectorAll('.align-btn'));
     elements.languageButtons = [];
+    elements.fontItems = [];
 }
 
 function bindEvents() {
@@ -362,7 +487,7 @@ function bindEvents() {
     });
 
     document.addEventListener('click', (event) => {
-        if (!event.target.closest('.lang-switcher')) {
+        if (!(event.target instanceof Element) || !event.target.closest('.lang-switcher')) {
             closeLangMenu();
         }
     });
@@ -395,4 +520,9 @@ function init() {
     generateArt();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// The script is a deferred module, but guard against running after DOMContentLoaded.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+} else {
+    init();
+}

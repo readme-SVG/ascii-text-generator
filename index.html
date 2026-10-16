@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASCII Text Generator — GitHub Style</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/figlet@1.8.0/lib/figlet.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/figlet@1.8.0/lib/figlet.js" integrity="sha384-em0OyuFXh2k1VJ3wPPqhDLUT+NWQKu8iKHx8cYUupkPUDMK5wShbAor9tUOU3S76" crossorigin="anonymous"></script>
     <script type="module" src="assets/js/app.js"></script>
 </head>
 <body>
@@ -51,7 +53,7 @@
                 <div class="panel-body">
                     <div class="form-group form-group-last">
                         <label class="form-label" id="label-text" for="inputText">Text Input</label>
-                        <textarea id="inputText" rows="3" placeholder="README&#10;My Project" spellcheck="false">README</textarea>
+                        <textarea id="inputText" rows="3" maxlength="200" placeholder="README&#10;My Project" spellcheck="false">README</textarea>
                     </div>
                     <button class="btn btn-primary" id="generateBtn" type="button">
                         <svg class="icon-sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.4 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0.4 8a8 8 0 1 1 16 0 8 8 0 0 1-16 0z"/><path d="M6.4 5.5v5l5-2.5-5-2.5z"/></svg>

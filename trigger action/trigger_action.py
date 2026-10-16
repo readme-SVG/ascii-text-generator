@@ -46,12 +46,15 @@ Attributes:
         when the triggering event is a push.
 """
 
-import os
 import json
+import os
 import re
+import sys
 import time
+from urllib.parse import quote
+
 import requests
-from github import Github, Auth
+from github import Auth, Github
 
 # ---------------------------------------------------------------------------
 # Environment — read once at module level so all functions share the values.
@@ -60,10 +63,20 @@ gh_token = os.environ.get("GITHUB_TOKEN")
 model_token = os.environ.get("GH_MODELS_TOKEN")
 repo_name = os.environ.get("REPOSITORY")
 event_name = os.environ.get("EVENT_NAME")
-allowed_users = [u.strip().lower() for u in os.environ.get("ALLOWED_USER", "").split(",")]
+# Empty entries are dropped so an unset ALLOWED_USER secret never matches anyone.
+allowed_users = [u.strip().lower() for u in os.environ.get("ALLOWED_USER", "").split(",") if u.strip()]
 
 MODEL_NAME = "Llama-3.3-70B-Instruct"
 ENDPOINT = "https://models.inference.ai.azure.com/chat/completions"
+REQUEST_TIMEOUT_SECONDS = 60
+PUSH_DIFF_LIMIT = 10000
+PULL_REQUEST_DIFF_LIMIT = 80000
+
+# Fork pull requests and unconfigured repositories do not receive secrets.
+# Skip them cleanly instead of failing the workflow.
+if not (gh_token and model_token and repo_name and allowed_users):
+    print("Required secrets or configuration are missing. Skipping.")
+    sys.exit(0)
 
 # Authenticate once; the ``repo`` object is reused throughout.
 auth = Auth.Token(gh_token)
@@ -81,17 +94,43 @@ dedup_key = ""
 pr_ref = None
 changed_files = []
 
+
+def add_file_patch(file, limit: int) -> bool:
+    """Append one file's patch to ``diff_text``, clipped so the total stays within ``limit``.
+
+    Returns:
+        True when the caller may keep reading files, False once the limit is reached.
+    """
+    global diff_text
+
+    changed_files.append(file.filename)
+    entry = f"File: {file.filename}\nPatch:\n{file.patch or ''}\n\n"
+    remaining = limit - len(diff_text)
+
+    if len(entry) > remaining:
+        diff_text += entry[:max(remaining, 0)] + "\n[Diff truncated...]"
+        return False
+
+    diff_text += entry
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Event routing — collect the diff and metadata for push vs pull_request.
 # ---------------------------------------------------------------------------
 if event_name == "push":
     commit_sha = os.environ.get("COMMIT_SHA")
-    commit = repo.get_commit(commit_sha)
+    if not commit_sha:
+        print("COMMIT_SHA is not set. Skipping.")
+        sys.exit(0)
 
+    # Check the actor before calling the API so non-allowed pushes cost nothing.
     actor_login = os.environ.get("GITHUB_ACTOR", "").strip().lower()
     if actor_login not in allowed_users:
         print(f"Action performed by {actor_login}, not in allowed list. Skipping.")
-        exit(0)
+        sys.exit(0)
+
+    commit = repo.get_commit(commit_sha)
 
     pr_match = re.search(r'\(#(\d+)\)', commit.commit.message)
     if pr_match:
@@ -103,45 +142,46 @@ if event_name == "push":
     trigger_labels = [m.lower() for m in re.findall(r'\[(.*?)\]', commit.commit.message)]
 
     for file in commit.files:
-        changed_files.append(file.filename)
-        diff_text += f"File: {file.filename}\nPatch:\n{file.patch}\n\n"
-        if len(diff_text) > 10000:
-            diff_text += "\n[Diff truncated...]"
+        if not add_file_patch(file, PUSH_DIFF_LIMIT):
             break
 
 elif event_name == "pull_request":
-    pr_number = int(os.environ.get("PR_NUMBER"))
+    pr_number = int(os.environ["PR_NUMBER"])
     pr = repo.get_pull(pr_number)
     author_login = pr.user.login.strip().lower()
     if author_login not in allowed_users:
-        exit(0)
+        print(f"Pull request author {author_login} is not in allowed list. Skipping.")
+        sys.exit(0)
 
     pr_ref = pr
     dedup_key = f"PR #{pr_number}"
-    event_context = f"PR Title: {pr.title}\nPR Body: {pr.body}"
+    event_context = f"PR Title: {pr.title}\nPR Body: {pr.body or ''}"
     trigger_labels = [label.name.lower() for label in pr.labels]
 
     for file in pr.get_files():
-        changed_files.append(file.filename)
-        diff_text += f"File: {file.filename}\nPatch:\n{file.patch}\n\n"
-        if len(diff_text) > 80000:
-            diff_text += "\n[Diff truncated...]"
+        if not add_file_patch(file, PULL_REQUEST_DIFF_LIMIT):
             break
 else:
-    exit(0)
+    sys.exit(0)
 
 if len(diff_text.strip()) < 50:
     print("Diff too small to analyze. Skipping.")
-    exit(0)
+    sys.exit(0)
 
+# Match the key as a whole token: "PR #1" must not match an existing "PR #12" issue.
+dedup_pattern = re.compile(re.escape(dedup_key) + r"(?![0-9A-Za-z])")
 for issue in repo.get_issues(state="all"):
-    if dedup_key in (issue.body or ""):
+    if dedup_pattern.search(issue.body or ""):
         print(f"Issue for {dedup_key} already exists (#{issue.number}), skipping.")
-        exit(0)
+        sys.exit(0)
 
 
 def was_already_closed(title_keyword: str) -> bool:
     """Return whether a similar issue title already exists in closed issues."""
+    # An empty keyword would match every issue, so treat it as "no match".
+    if not title_keyword.strip():
+        return False
+
     for issue in repo.get_issues(state="closed"):
         if title_keyword.lower() in (issue.title or "").lower():
             print(f"Similar closed issue found: #{issue.number} — skipping.")
@@ -154,7 +194,7 @@ def build_permalink(filename: str, line: int = 1) -> str:
     sha = os.environ.get("COMMIT_SHA") or ""
     if not sha and pr_ref:
         sha = pr_ref.head.sha
-    return f"https://github.com/{repo_name}/blob/{sha}/{filename}#L{line}"
+    return f"https://github.com/{repo_name}/blob/{sha}/{quote(filename, safe='/')}#L{line}"
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +466,7 @@ def call_model(prompt: str, retries: int = 3, delay: int = 5) -> dict:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {model_token}"
     }
+    # Note: the token is never printed; only exception summaries reach the log.
     payload = {
         "messages": [
             {"role": "system", "content": "You are a professional software auditor. Always return valid JSON only. No markdown, no explanation, just the JSON object."},
@@ -437,19 +478,30 @@ def call_model(prompt: str, retries: int = 3, delay: int = 5) -> dict:
 
     for attempt in range(retries):
         try:
-            resp = requests.post(ENDPOINT, headers=headers, json=payload, timeout=60)
+            resp = requests.post(ENDPOINT, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
             resp.raise_for_status()
             data = resp.json()
             raw = data['choices'][0]['message']['content'].strip()
-            raw = re.sub(r'^```json\s*|```$', '', raw, flags=re.MULTILINE).strip()
+            # Strip a single surrounding Markdown code fence, anchored to the whole reply
+            # so fences inside JSON string values are left untouched.
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw).strip()
             return json.loads(raw)
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            print(f"Attempt {attempt + 1} failed: HTTP {status}")
+            # Client errors (bad token, malformed request) will not succeed on retry.
+            # Rate limiting (429) is the exception and is retried.
+            if status is not None and 400 <= status < 500 and status != 429:
+                break
         except Exception as e:
             print(f"Attempt {attempt + 1} failed: {e}")
-            if attempt < retries - 1:
-                time.sleep(delay)
+
+        if attempt < retries - 1:
+            time.sleep(delay)
 
     print("All attempts failed. Exiting gracefully.")
-    exit(0)
+    sys.exit(0)
 
 
 # ---------------------------------------------------------------------------
@@ -458,23 +510,40 @@ def call_model(prompt: str, retries: int = 3, delay: int = 5) -> dict:
 
 result = call_model(prompt)
 
-title_keyword = result.get("issue_title", "")[:40]
-if was_already_closed(title_keyword):
-    exit(0)
+# The model output is untrusted input: validate the fields used below before acting on them.
+if not isinstance(result, dict):
+    print("Model response is not a JSON object. Skipping.")
+    sys.exit(0)
 
-affected_file = result.get("affected_file", "")
-affected_line = result.get("affected_line", 1)
+issue_title = result.get("issue_title")
+issue_body_template = result.get("issue_body")
+if not isinstance(issue_title, str) or not issue_title.strip() or not isinstance(issue_body_template, str):
+    print("Model response is missing required fields. Skipping.")
+    sys.exit(0)
+
+# GitHub limits issue titles to 256 characters.
+issue_title = issue_title.strip()[:256]
+
+title_keyword = issue_title[:40]
+if was_already_closed(title_keyword):
+    sys.exit(0)
+
+affected_file = str(result.get("affected_file") or "").strip()
+try:
+    affected_line = max(int(result.get("affected_line", 1)), 1)
+except (TypeError, ValueError):
+    affected_line = 1
 
 if affected_file:
     permalink = build_permalink(affected_file, affected_line)
-    issue_body = result["issue_body"].replace("PUT_PERMALINK_HERE", permalink)
+    issue_body = issue_body_template.replace("PUT_PERMALINK_HERE", permalink)
 else:
-    issue_body = result["issue_body"].replace("PUT_PERMALINK_HERE", "_No specific file identified_")
+    issue_body = issue_body_template.replace("PUT_PERMALINK_HERE", "_No specific file identified_")
 
 actor_name = os.environ.get("GITHUB_ACTOR", "unknown")
 footer = f"\n\n---\n*Generated from {dedup_key} | Auto-detected role: `{role_key}` | Processed by actor: {actor_name}*"
 
-severity = result.get("severity", "medium").lower()
+severity = str(result.get("severity", "medium")).strip().lower()
 severity_label_map = {
     "critical":      "severity: critical",
     "high":          "severity: high",
@@ -485,17 +554,22 @@ severity_label_map = {
     "informational": "severity: informational",
 }
 extra_labels = [severity_label_map.get(severity, "severity: medium")]
-all_labels = list(set(result.get("labels", []) + extra_labels))
+
+raw_labels = result.get("labels", [])
+if not isinstance(raw_labels, list):
+    raw_labels = []
+model_labels = [label.strip()[:50] for label in raw_labels if isinstance(label, str) and label.strip()]
+all_labels = sorted(set(model_labels + extra_labels))
 
 issue = repo.create_issue(
-    title=result["issue_title"],
+    title=issue_title,
     body=issue_body + footer,
     labels=all_labels
 )
 print(f"Created issue #{issue.number}: {issue.title}")
 
 if pr_ref:
-    summary = result.get("summary", "")
+    summary = str(result.get("summary", "") or "").strip()
     if summary:
         pr_comment = (
             f"### AI Analysis Summary\n\n"
